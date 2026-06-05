@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 import numpy as np
+from matplotlib.colors import ListedColormap
 
-from src.config.constants import Action, DEFAULT_GAMMA
+from src.config.constants import DEFAULT_GAMMA, Action
 
 
 class GridWorldLabirint:
