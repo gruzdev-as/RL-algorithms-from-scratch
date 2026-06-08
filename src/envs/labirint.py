@@ -1,8 +1,11 @@
 from collections.abc import Sequence
+from itertools import product
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
 from matplotlib.colors import ListedColormap
+from matplotlib.patches import Circle
 
 from src.config.constants import DEFAULT_GAMMA, Action
 
@@ -26,24 +29,44 @@ class GridWorldLabirint:
         num_target_cells: int,
         max_min_num_border_cells: Sequence[int],
         gamma: float = DEFAULT_GAMMA,
+        is_stochastic: bool = False,
+        epsilon_greedy: bool = False,
+        epsilon: float = 0.5
     ) -> None:
         self.N = N
+        self.num_actions = len(Action)
         self.reward_vector = reward_vector
         self.num_target_cells = num_target_cells
         self.max_min_num_border_cells = max_min_num_border_cells
         self.gamma = gamma
+        self.is_stochastic = is_stochastic
+        self.epsilon_greedy = epsilon_greedy
+        self.epsilon = max(0, min(1, epsilon))
+
+        if not is_stochastic and epsilon_greedy:
+            print("To use epsilon greedy politics enable stochastic politics by setting is_stochastic=True.")
+            self.epsilon_greedy = False
 
         self._create_grid_world()
+        self._init_random_policy()
 
-        self.policy_matrix = np.random.randint(0, 5, (N, N))
         self.state_value_matrix = np.zeros((N, N))
-        self.action_value_matrix = np.zeros((N, N, 5))
+        self.transition_probs = np.eye(self.num_actions)  # default = deterministic. TODO add "wind"
+        self.action_value_matrix = np.zeros((N, N, self.num_actions))
 
     def reset(self) -> None:
         """Reset the policy, state, and action matrices to initial values."""
-        self.policy_matrix = np.random.randint(0, 5, (self.N, self.N))
+        self._init_random_policy()
         self.state_value_matrix = np.zeros((self.N, self.N))
-        self.action_value_matrix = np.zeros((self.N, self.N, 5))
+        self.action_value_matrix = np.zeros((self.N, self.N, self.num_actions))
+
+    def _init_random_policy(self) -> None:
+        if self.is_stochastic:
+            self.policy_matrix = np.full(shape=(self.N, self.N, self.num_actions), fill_value=1 / self.num_actions)
+        else:
+            self.policy_matrix = np.zeros(shape=(self.N, self.N, self.num_actions), dtype=np.float32)
+            actions = np.random.randint(0, self.num_actions, size=(self.N, self.N))
+            self.policy_matrix = (actions[:, :, None] == np.arange(self.num_actions)).astype(float)
 
     def _create_grid_world(self) -> None:
         self.grid_world_matrix = np.full((self.N, self.N), self.reward_vector[1])
@@ -64,31 +87,37 @@ class GridWorldLabirint:
 
     def show(self) -> None:
         """Visualize current policy and state values."""
-        _, axes = plt.subplots(1, 2, figsize=(12, 7))
+        _, axes = plt.subplots(1, 2, figsize=(20, 13))
         self._visualize_grid_world(axes)
+
+    def _draw_annot(self, axes: list[Axes]) -> None:
+        off = 0.1 if self.is_stochastic else 0
+        max_len = 0.45
+        quiver_kw = {"angles": "xy", "scale_units": "xy", "scale": 1, "color": "black"}
+        quiver_kw["pivot"] = "tail" if self.is_stochastic else "mid"
+
+        for i, j in product(list(range(self.N)), list(range(self.N))):
+            inv_i = self.N - 1 - i
+            probas = self.policy_matrix[i, j]
+            if probas[0]:
+                axes[0].quiver(j, inv_i + off, 0, max_len * probas[0], **quiver_kw)
+            if probas[1]:
+                axes[0].quiver(j + off, inv_i, max_len * probas[1], 0, **quiver_kw)
+            if probas[2]:
+                axes[0].quiver(j, inv_i - off, 0, -max_len * probas[2], **quiver_kw)
+            if probas[3]:
+                axes[0].quiver(j - off, inv_i, -max_len * probas[3], 0, **quiver_kw)
+            if probas[4]:
+                circle = Circle((j, inv_i), max_len * probas[4] * 0.5, color="black", fill=False, linewidth=2)
+                axes[0].add_patch(circle)
+            axes[1].text(j, inv_i, round(self.state_value_matrix[i, j], 1), ha="center", va="center", fontsize=25, color="black")
 
     def _visualize_grid_world(self, axes) -> None:
         for ax in axes:
             ax.clear()
 
         cmap = ListedColormap(["red", "white", "cyan"])
-
-        for i in range(self.N):
-            for j in range(self.N):
-                inv_i = self.N - 1 - i
-                action = self.policy_matrix[i, j]
-                if action == Action.UP:
-                    axes[0].quiver(j, inv_i - 0.25, 0, 0.5, angles="xy", scale_units="xy", scale=1, color="black")
-                elif action == Action.RIGHT:
-                    axes[0].quiver(j - 0.25, inv_i, 0.5, 0, angles="xy", scale_units="xy", scale=1, color="black")
-                elif action == Action.DOWN:
-                    axes[0].quiver(j, inv_i + 0.25, 0, -0.5, angles="xy", scale_units="xy", scale=1, color="black")
-                elif action == Action.LEFT:
-                    axes[0].quiver(j + 0.25, inv_i, -0.5, 0, angles="xy", scale_units="xy", scale=1, color="black")
-                elif action == Action.STAY:
-                    axes[0].text(j, inv_i + 0.05, "○", ha="center", va="center", fontsize=20, color="black")
-
-                axes[1].text(j, inv_i + 0.05, round(self.state_value_matrix[i, j], 1), ha="center", va="center", fontsize=13, color="black")
+        self._draw_annot(axes)
 
         for ax in axes:
             ax.invert_yaxis()
@@ -100,13 +129,13 @@ class GridWorldLabirint:
                 vmin=-1,
                 vmax=1,
             )
-            ax.set_xticks(np.arange(self.N))
-            ax.set_yticks(np.arange(self.N))
             ax.set_xticklabels([])
             ax.set_yticklabels([])
+            ax.tick_params(left=False, bottom=False)
 
         axes[0].set_title("Policy")
         axes[1].set_title("State Values")
+        plt.tight_layout()
         plt.show()
 
     def _get_neighbours(self, matrix, i, j) -> np.ndarray:
@@ -127,8 +156,20 @@ class GridWorldLabirint:
         i, j = np.meshgrid(np.arange(self.N), np.arange(self.N), indexing="ij")
         return self._get_neighbours(self.grid_world_matrix, i, j)
 
+    def sample_from_probs(self, probs: np.ndarray) -> np.ndarray:
+        """Sample indices from probability distributions along the last axis."""
+        flat = probs.reshape(-1, probs.shape[-1])
+        cdf = np.cumsum(flat, axis=-1)
+        draws = np.random.rand(flat.shape[0], 1)
+        return np.argmax(cdf >= draws, axis=-1).reshape(probs.shape[:-1])
+
+    def sample_action_based_on_proba(self) -> np.ndarray:
+        """Sample one action per cell from the current policy."""
+        return self.sample_from_probs(self.policy_matrix)
+
     def get_next_state_values(self) -> np.ndarray:
         """Return (N, N, 5) next-state values; wall hits map to the current cell's value."""
         i, j = np.meshgrid(np.arange(self.N), np.arange(self.N), indexing="ij")
         padded = np.pad(self.state_value_matrix, pad_width=1, mode="edge")
-        return self._get_neighbours(padded, i, j)
+        neighbour_values = self._get_neighbours(padded, i, j)
+        return neighbour_values @ self.transition_probs.T
