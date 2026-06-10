@@ -31,7 +31,7 @@ class GridWorldLabirint:
         gamma: float = DEFAULT_GAMMA,
         is_stochastic: bool = False,
         epsilon_greedy: bool = False,
-        epsilon: float = 0.5
+        epsilon: float = 0.5,
     ) -> None:
         self.N = N
         self.num_actions = len(Action)
@@ -71,10 +71,13 @@ class GridWorldLabirint:
     def _create_grid_world(self) -> None:
         self.grid_world_matrix = np.full((self.N, self.N), self.reward_vector[1])
 
-        target_coords = [(np.random.randint(0, self.N), np.random.randint(0, self.N)) for _ in range(self.num_target_cells)]
+        target_coords = [
+            (np.random.randint(0, self.N), np.random.randint(0, self.N)) for _ in range(self.num_target_cells)
+        ]
         if target_coords:
             rows, cols = zip(*target_coords)
             self.grid_world_matrix[rows, cols] = self.reward_vector[2]
+        self.target_coords = target_coords
 
         num_obstacles = np.random.choice(np.arange(*self.max_min_num_border_cells), replace=False)
         obstacle_coords = [(np.random.randint(0, self.N), np.random.randint(0, self.N)) for _ in range(num_obstacles)]
@@ -83,7 +86,12 @@ class GridWorldLabirint:
                 self.grid_world_matrix[cell] = self.reward_vector[0]
 
         # Padding with forbidden reward lets _get_neighbours handle out-of-bounds naturally
-        self.grid_world_matrix = np.pad(self.grid_world_matrix, pad_width=1, mode="constant", constant_values=self.reward_vector[0])
+        self.grid_world_matrix = np.pad(
+            self.grid_world_matrix,
+            pad_width=1,
+            mode="constant",
+            constant_values=self.reward_vector[0],
+        )
 
     def show(self) -> None:
         """Visualize current policy and state values."""
@@ -110,7 +118,8 @@ class GridWorldLabirint:
             if probas[4]:
                 circle = Circle((j, inv_i), max_len * probas[4] * 0.5, color="black", fill=False, linewidth=2)
                 axes[0].add_patch(circle)
-            axes[1].text(j, inv_i, round(self.state_value_matrix[i, j], 1), ha="center", va="center", fontsize=25, color="black")
+            state_value = round(self.state_value_matrix[i, j], 1)
+            axes[1].text(j, inv_i, state_value, ha="center", va="center", fontsize=25, color="black")
 
     def _visualize_grid_world(self, axes) -> None:
         for ax in axes:
@@ -166,6 +175,17 @@ class GridWorldLabirint:
     def sample_action_based_on_proba(self) -> np.ndarray:
         """Sample one action per cell from the current policy."""
         return self.sample_from_probs(self.policy_matrix)
+
+    def step(self, i, j, a):
+        """Return (next_i, next_j, reward) for state (i, j) taking action a.
+        Handles wall collisions by staying in place. Works for scalars or arrays.
+        """
+        di = np.select([a == Action.UP, a == Action.DOWN], [-1, 1], default=0)
+        dj = np.select([a == Action.RIGHT, a == Action.LEFT], [1, -1], default=0)
+        next_i, next_j = i + di, j + dj
+        reward = self.grid_world_matrix[next_i + 1, next_j + 1]
+        hit_wall = (next_i < 0) | (next_i >= self.N) | (next_j < 0) | (next_j >= self.N)
+        return np.where(hit_wall, i, next_i), np.where(hit_wall, j, next_j), reward
 
     def get_next_state_values(self) -> np.ndarray:
         """Return (N, N, 5) next-state values; wall hits map to the current cell's value."""

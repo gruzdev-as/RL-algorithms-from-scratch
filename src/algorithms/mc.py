@@ -1,6 +1,5 @@
 import numpy as np
 
-from src.config.constants import Action
 from src.envs.labirint import GridWorldLabirint
 from src.tools.egreedy import epsilon_greedy
 
@@ -14,18 +13,8 @@ def _rollout(env: GridWorldLabirint, num_steps: int) -> np.ndarray:
     for step in range(num_steps):
         actual_a = env.sample_from_probs(env.transition_probs[cur_a])  # sample actual transition
 
-        di = np.select([actual_a == Action.UP, actual_a == Action.DOWN], [-1, 1], default=0)
-        dj = np.select([actual_a == Action.RIGHT, actual_a == Action.LEFT], [1, -1], default=0)
-
-        next_i, next_j = cur_i + di, cur_j + dj
-
-        returns += (env.gamma**step) * env.grid_world_matrix[next_i + 1, next_j + 1]
-
-        hit_wall = (next_i < 0) | (next_i >= env.N) | (next_j < 0) | (next_j >= env.N)
-        next_i = np.where(hit_wall, cur_i, next_i)
-        next_j = np.where(hit_wall, cur_j, next_j)
-
-        cur_i, cur_j = next_i, next_j
+        cur_i, cur_j, rewards = env.step(cur_i, cur_j, actual_a)
+        returns += (env.gamma**step) * rewards
         cur_a = env.sample_from_probs(env.policy_matrix[cur_i, cur_j])  # sample next action from policy
 
     return returns
