@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from tqdm.notebook import tqdm
 
-from src.config.constants import Action
+from src.config.constants import DEFAULT_ALPHA, DEFAULT_NUM_EPISODES, DEFAULT_NUM_MAX_STEPS, Action
 from src.envs.labirint import GridWorldLabirint
 from src.tools.egreedy import epsilon_greedy
 
@@ -14,9 +14,9 @@ class TDAgent(ABC):
     def __init__(
         self,
         env: GridWorldLabirint,
-        alpha: float = 0.1,
-        num_episodes: int = 100,
-        num_max_steps: int = 1000,
+        alpha: float = DEFAULT_ALPHA,
+        num_episodes: int = DEFAULT_NUM_EPISODES,
+        num_max_steps: int = DEFAULT_NUM_MAX_STEPS,
         update_policy: bool = True,
     ):
         self.env = env

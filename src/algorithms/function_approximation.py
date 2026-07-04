@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from tqdm.notebook import tqdm
 
-from src.config.constants import Action
+from src.config.constants import DEFAULT_ALPHA_FA, DEFAULT_NUM_EPISODES, DEFAULT_NUM_MAX_STEPS, Action
 from src.envs.labirint import GridWorldLabirint
 from src.tools.features import FeatureExtractor
 
@@ -15,9 +15,9 @@ class TDAgentFA(ABC):
         self,
         env: GridWorldLabirint,
         phi: FeatureExtractor,
-        alpha: float = 1e-3,
-        num_episodes: int = 100,
-        num_max_steps: int = 1000,
+        alpha: float = DEFAULT_ALPHA_FA,
+        num_episodes: int = DEFAULT_NUM_EPISODES,
+        num_max_steps: int = DEFAULT_NUM_MAX_STEPS,
     ):
         self.env = env
         self.phi = phi

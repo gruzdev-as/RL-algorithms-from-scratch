@@ -7,7 +7,7 @@ from matplotlib.axes import Axes
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Circle, Rectangle
 
-from src.config.constants import DEFAULT_GAMMA, Action
+from src.config.constants import DEFAULT_EPSILON, DEFAULT_GAMMA, Action
 
 
 class GridWorldLabirint:
@@ -31,7 +31,7 @@ class GridWorldLabirint:
         gamma: float = DEFAULT_GAMMA,
         is_stochastic: bool = False,
         epsilon_greedy: bool = False,
-        epsilon: float = 0.5,
+        epsilon: float = DEFAULT_EPSILON,
     ) -> None:
         self.N = N
         self.num_actions = len(Action)
