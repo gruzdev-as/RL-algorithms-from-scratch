@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.colors import ListedColormap
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Rectangle
 
 from src.config.constants import DEFAULT_GAMMA, Action
 
@@ -93,10 +93,10 @@ class GridWorldLabirint:
             constant_values=self.reward_vector[0],
         )
 
-    def show(self) -> None:
+    def show(self, starting_point: tuple[int, int] | None = None) -> None:
         """Visualize current policy and state values."""
         _, axes = plt.subplots(1, 2, figsize=(20, 13))
-        self._visualize_grid_world(axes)
+        self._visualize_grid_world(axes, starting_point)
 
     def _draw_annot(self, axes: list[Axes]) -> None:
         off = 0.1 if self.is_stochastic else 0
@@ -121,7 +121,7 @@ class GridWorldLabirint:
             state_value = round(self.state_value_matrix[i, j], 1)
             axes[1].text(j, inv_i, state_value, ha="center", va="center", fontsize=25, color="black")
 
-    def _visualize_grid_world(self, axes) -> None:
+    def _visualize_grid_world(self, axes, starting_point: tuple[int, int] | None = None) -> None:
         for ax in axes:
             ax.clear()
 
@@ -138,6 +138,10 @@ class GridWorldLabirint:
                 vmin=-1,
                 vmax=1,
             )
+            if starting_point is not None:
+                si, sj = starting_point
+                ax.add_patch(Rectangle((sj - 0.5, self.N - 1 - si - 0.5), 1, 1,
+                                       color="lime", alpha=0.4, zorder=2))
             ax.set_xticklabels([])
             ax.set_yticklabels([])
             ax.tick_params(left=False, bottom=False)

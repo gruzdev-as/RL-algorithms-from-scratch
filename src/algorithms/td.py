@@ -1,69 +1,100 @@
+from abc import ABC, abstractmethod
+
 import numpy as np
 from tqdm.notebook import tqdm
 
-from src.config.constants import TD_ALGO_TYPES
+from src.config.constants import Action
 from src.envs.labirint import GridWorldLabirint
 from src.tools.egreedy import epsilon_greedy
 
 
-def td_learning(
-    env: GridWorldLabirint,
-    algo_type: TD_ALGO_TYPES,
-    starting_point: np.ndarray,
-    alpha: float = 0.1,
-    num_episodes: int = 100,
-    num_max_steps: int = 1000,
-    off_policy: bool = True,
-) -> None:
+class TDAgent(ABC):
+    """Abstract base for tabular TD agents; subclasses implement `_td_target`."""
 
-    def update_q_value(s, a, r, s_prime, a_prime):
-        match algo_type:
-            case "SARSA":
-                td_target = r + env.gamma * env.action_value_matrix[*s_prime, a_prime]
-                td_error = env.action_value_matrix[*s, a] - td_target
-            case "expected_SARSA":
-                expected_q = np.dot(env.policy_matrix[s_prime], env.action_value_matrix[*s_prime])
-                td_target = r + env.gamma * expected_q
-                td_error = env.action_value_matrix[*s, a] - td_target
-            case "Q-learning":
-                td_target = r + env.gamma * np.max(env.action_value_matrix[*s_prime])
-                td_error = env.action_value_matrix[*s, a] - td_target
-            case _:
-                error_msg = f"Unknow algo_type: {algo_type}. Choose one from {TD_ALGO_TYPES}"
-                raise ValueError(error_msg)
-        env.action_value_matrix[*s, a] -= alpha * td_error
+    def __init__(
+        self,
+        env: GridWorldLabirint,
+        alpha: float = 0.1,
+        num_episodes: int = 100,
+        num_max_steps: int = 1000,
+        update_policy: bool = True,
+    ):
+        self.env = env
+        self.alpha = alpha
+        self.num_episodes = num_episodes
+        self.num_max_steps = num_max_steps
+        self.update_policy = update_policy
 
-    def update_policy(s):
-        best_action = np.argmax(env.action_value_matrix[*s, :], axis=-1)
-        new_policy = epsilon_greedy(best_action, env.epsilon, num_actions=env.num_actions)
-        env.policy_matrix[*s, :] = new_policy
+    @abstractmethod
+    def _td_target(self, r: float, s_prime: tuple, _a_prime: int, done: bool = False) -> float: ...
 
-    def generate_experience(curr_state, curr_action):
+    def _update_q(self, s, a, r, s_prime, _a_prime, done=False):
+        td_error = self.env.action_value_matrix[*s, a] - self._td_target(r, s_prime, _a_prime, done)
+        self.env.action_value_matrix[*s, a] -= self.alpha * td_error
 
-        S = curr_state
-        A = curr_action
+    def _update_policy(self, s):
+        best_action = np.argmax(self.env.action_value_matrix[*s, :], axis=-1)
+        self.env.policy_matrix[*s, :] = epsilon_greedy(best_action, self.env.epsilon, num_actions=self.env.num_actions)
 
-        next_i, next_j, R = env.step(S[0], S[1], A)
-        S_prime = (next_i.item(), next_j.item())
-        A_prime = env.sample_from_probs(env.policy_matrix[S_prime])
+    def _generate_experience(self, s, a):
+        next_i, next_j, r = self.env.step(s[0], s[1], a)
+        s_prime = (next_i.item(), next_j.item())
+        a_prime = self.env.sample_from_probs(self.env.policy_matrix[s_prime])
+        return s, a, r.item(), s_prime, a_prime.item()
 
-        return S, A, R.item(), S_prime, A_prime.item()
+    def train(self, starting_point: tuple[int, int]):
+        self.starting_point = starting_point
+        for _ in tqdm(range(self.num_episodes)):
+            curr_state = starting_point
+            curr_action = self.env.sample_from_probs(self.env.policy_matrix[starting_point]).item()
+            curr_steps = 0
 
-    for _ in tqdm(range(num_episodes)):
-        curr_state = starting_point
-        curr_action = env.sample_from_probs(env.policy_matrix[starting_point]).item()
-        curr_steps = 0
-        while curr_state not in env.target_coords and curr_steps < num_max_steps:
-            curr_steps += 1
-            s, a, r, s_prime, a_prime = generate_experience(curr_state, curr_action)
-            update_q_value(s, a, r, s_prime, a_prime)
-            update_policy(s) if algo_type != "Q-learning" or not off_policy else None
-            curr_state = s_prime
-            curr_action = a_prime
+            while curr_state not in self.env.target_coords and curr_steps < self.num_max_steps:
+                curr_steps += 1
+                s, a, r, s_prime, a_prime = self._generate_experience(curr_state, curr_action)
+                done = s_prime in self.env.target_coords
+                self._update_q(s, a, r, s_prime, a_prime, done=done)
+                if self.update_policy:
+                    self._update_policy(s)
+                curr_state, curr_action = s_prime, a_prime
 
-    if algo_type == "Q-learning" and off_policy:
-        best_actions = np.argmax(env.action_value_matrix, axis=-1)
-        env.policy_matrix = np.eye(env.num_actions)[best_actions]
+        self._finalize()
 
-    env.show()
-    print(f"{algo_type} converged!")
+    def _finalize(self):
+
+        for ti, tj in self.env.target_coords:
+            self.env.policy_matrix[ti, tj] = np.eye(self.env.num_actions)[Action.STAY]
+
+        self.env.state_value_matrix = np.max(self.env.action_value_matrix, axis=-1)
+        self.env.show(getattr(self, "starting_point", None))
+        print(f"{self.__class__.__name__} converged!")
+
+
+class SARSAAgent(TDAgent):
+    """On-policy TD: target uses Q(s', a') where a' is sampled from the current policy."""
+
+    def _td_target(self, r, s_prime, _a_prime, done=False):
+        return r if done else r + self.env.gamma * self.env.action_value_matrix[*s_prime, _a_prime]
+
+
+class ExpectedSARSAAgent(TDAgent):
+    """On-policy TD: target uses the expected value E_π[Q(s', :)] over all actions."""
+
+    def _td_target(self, r, s_prime, _a_prime, done=False):
+        expected_q = np.dot(self.env.policy_matrix[s_prime], self.env.action_value_matrix[*s_prime])
+        return r if done else r + self.env.gamma * expected_q
+
+
+class QLearningAgent(TDAgent):
+    """Off-policy TD: target uses max_a Q(s', a); greedy policy extracted after training."""
+
+    def __init__(self, env, update_policy: bool = False, **kwargs):
+        super().__init__(env, update_policy=update_policy, **kwargs)
+
+    def _td_target(self, r, s_prime, _a_prime, done=False):
+        return r if done else r + self.env.gamma * np.max(self.env.action_value_matrix[*s_prime])
+
+    def _finalize(self):
+        best_actions = np.argmax(self.env.action_value_matrix, axis=-1)
+        self.env.policy_matrix = np.eye(self.env.num_actions)[best_actions]
+        super()._finalize()
