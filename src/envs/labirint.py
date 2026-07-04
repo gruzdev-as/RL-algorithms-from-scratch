@@ -25,9 +25,9 @@ class GridWorldLabirint:
     def __init__(
         self,
         N: int,
-        reward_vector: Sequence[int],
+        reward_vector: Sequence[int | float],
         num_target_cells: int,
-        max_min_num_border_cells: Sequence[int],
+        max_min_num_border_cells: Sequence[int | float],
         gamma: float = DEFAULT_GAMMA,
         is_stochastic: bool = False,
         epsilon_greedy: bool = False,
@@ -128,20 +128,18 @@ class GridWorldLabirint:
         cmap = ListedColormap(["red", "white", "cyan"])
         self._draw_annot(axes)
 
+        grid = self.grid_world_matrix[1:-1, 1:-1]
+        color_idx = np.ones_like(grid, dtype=int)
+        color_idx[grid == self.reward_vector[0]] = 0
+        color_idx[grid == self.reward_vector[2]] = 2
+
         for ax in axes:
             ax.invert_yaxis()
-            ax.imshow(
-                self.grid_world_matrix[1:-1, 1:-1],
-                cmap=cmap,
-                alpha=0.7,
-                extent=[-0.5, self.N - 0.5, -0.5, self.N - 0.5],
-                vmin=-1,
-                vmax=1,
-            )
+            ax.imshow(color_idx, cmap=cmap, alpha=0.7, extent=[-0.5, self.N - 0.5, -0.5, self.N - 0.5], vmin=0, vmax=2)
             if starting_point is not None:
                 si, sj = starting_point
-                ax.add_patch(Rectangle((sj - 0.5, self.N - 1 - si - 0.5), 1, 1,
-                                       color="lime", alpha=0.4, zorder=2))
+                xy = (sj - 0.5, self.N - 1 - si - 0.5)
+                ax.add_patch(Rectangle(xy=xy, width=1, height=1, color="lime", alpha=0.4, zorder=2))
             ax.set_xticklabels([])
             ax.set_yticklabels([])
             ax.tick_params(left=False, bottom=False)
